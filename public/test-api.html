@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Google Map Tiles API Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #111;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .success {
+            background: #22c55e;
+            color: black;
+        }
+
+        .item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 8px;
+        }
+
+        code {
+            background: #000;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+
+        .error {
+            color: #ef4444;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Map Tiles API Diagnostic</h1>
+
+    <div class="item">
+        <strong>1. API Key Status:</strong>
+        <div id="key-status">Checking...</div>
+    </div>
+
+    <div class="item">
+        <strong>2. Map Tiles API (3D) Check:</strong>
+        <div id="tiles-status">Waiting...</div>
+        <div id="tiles-detail" style="font-size: 0.8em; color: #aaa; margin-top: 5px;"></div>
+    </div>
+
+    <script type="module">
+        // READ THE API KEY FROM LOCAL STORAGE OR PROMPT IF MISSING (SIMULATION)
+        // In a real separate file we can't easily read .env without a build step, 
+        // so we will ask the user to paste it or try to fetch it if hosted.
+        // For this local test file, users usually have to paste their key.
+
+        // HOWEVER, since this is in the project, we can try to fetch it if we were running via Vite, 
+        // but this is a standalone HTML. We will ask user specifically.
+
+        async function runDiagnostics() {
+            const keyStatus = document.getElementById('key-status');
+            const tilesStatus = document.getElementById('tiles-status');
+            const tilesDetail = document.getElementById('tiles-detail');
+
+            // 1. Get API Key
+            let apiKey = '';
+            try {
+                // Try to grab from typical Vite env generic location if possible, otherwise prompt
+                // BUT we are static. Let's just prompt.
+                apiKey = prompt("Please paste your Google Maps API Key to test:");
+            } catch (e) { }
+
+            if (!apiKey) {
+                keyStatus.innerText = "No API Key provided.";
+                keyStatus.style.color = "red";
+                return;
+            }
+
+            keyStatus.innerHTML = "Key provided (<span style='filter:blur(3px)'>" + apiKey.slice(0, 5) + "...</span>)";
+
+            // 2. Test Map Tiles API via a direct Fetch to the Tiles endpoint
+            // This is the direct API endpoint for 3D Tiles.
+            // URL: https://tile.googleapis.com/v1/3dtiles/root.json?key=YOUR_KEY
+
+            tilesStatus.innerText = "Pinging Google API...";
+
+            const url = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${apiKey}`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (response.ok) {
+                    tilesStatus.innerHTML = "<span class='success'>✅ ENABLED & WORKING</span>";
+                    tilesDetail.innerText = "Server returned valid 3D Tiles root.";
+                } else {
+                    tilesStatus.innerHTML = "<span class='error'>❌ FAILED</span>";
+                    tilesDetail.innerHTML = `
+                        <strong>Error ${response.status}:</strong> ${data.error ? data.error.message : 'Unknown error'}<br>
+                        <br>
+                        <em>Common causes:</em><br>
+                        1. <strong>"Map Tiles API"</strong> is not enabled in Cloud Console.<br>
+                        2. <strong>Billing</strong> is not enabled for the project.<br>
+                        3. API Key restrictions prevent use from this IP/Referrer.
+                    `;
+                }
+            } catch (err) {
+                tilesStatus.innerHTML = "<span class='error'>❌ NETWORK ERROR</span>";
+                tilesDetail.innerText = err.message;
+            }
+        }
+
+        setTimeout(runDiagnostics, 500);
+
+    </script>
+</body>
+
+</html>
