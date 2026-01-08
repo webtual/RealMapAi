@@ -13,8 +13,9 @@ const CATEGORIES = [
 
 const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarkers }) => {
     const [selectedCategory, setSelectedCategory] = useState(null);
-    const [places, setPlaces] = useState([]); // List of fetched places
-    const [selectedPlaceIds, setSelectedPlaceIds] = useState(new Set()); // Set of IDs
+    const [places, setPlaces] = useState([]); // List of fetched places (current category)
+    const [selectedPlacesMap, setSelectedPlacesMap] = useState(new Map()); // Persistent Map of selected places {id: place}
+
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -26,8 +27,7 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
             setIsLoading(true);
             setError(null);
             setPlaces([]);
-            setSelectedPlaceIds(new Set());
-            onUpdateMarkers([]); // Clear map markers
+            // Do NOT clear selected places or markers when changing category!
 
             const service = new placesLib.PlacesService(document.createElement('div'));
 
@@ -41,7 +41,6 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
                 setIsLoading(false);
                 if (status === placesLib.PlacesServiceStatus.OK) {
                     setPlaces(results);
-                    // Automatically uncheck all initially
                 } else {
                     setError('No places found or API error.');
                 }
@@ -51,40 +50,41 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
         fetchPlaces();
     }, [selectedCategory, placesLib, mapInstance]);
 
-    // Effect: Sync markers when selection changes
+    // Effect: Sync markers when global selection map changes
     useEffect(() => {
-        const markersToShow = places.filter(p => selectedPlaceIds.has(p.place_id));
-        onUpdateMarkers(markersToShow);
-    }, [selectedPlaceIds, places, onUpdateMarkers]);
+        onUpdateMarkers(Array.from(selectedPlacesMap.values()));
+    }, [selectedPlacesMap, onUpdateMarkers]);
+
 
     const handleCategoryClick = (categoryId) => {
         if (selectedCategory === categoryId) {
             setSelectedCategory(null); // Deselect if clicking same
             setPlaces([]);
-            setSelectedPlaceIds(new Set());
-            onUpdateMarkers([]);
         } else {
             setSelectedCategory(categoryId);
         }
     };
 
-    const handleCheckboxChange = (placeId) => {
-        const newSelected = new Set(selectedPlaceIds);
-        if (newSelected.has(placeId)) {
-            newSelected.delete(placeId);
+    const handleCheckboxChange = (place) => {
+        const newMap = new Map(selectedPlacesMap);
+        if (newMap.has(place.place_id)) {
+            newMap.delete(place.place_id);
         } else {
-            newSelected.add(placeId);
+            newMap.set(place.place_id, place);
         }
-        setSelectedPlaceIds(newSelected);
+        setSelectedPlacesMap(newMap);
     };
 
     const handleSelectAll = (e) => {
+        const newMap = new Map(selectedPlacesMap);
         if (e.target.checked) {
-            const allIds = new Set(places.map(p => p.place_id));
-            setSelectedPlaceIds(allIds);
+            // Add all current visible places to map
+            places.forEach(p => newMap.set(p.place_id, p));
         } else {
-            setSelectedPlaceIds(new Set());
+            // Remove all current visible places from map
+            places.forEach(p => newMap.delete(p.place_id));
         }
+        setSelectedPlacesMap(newMap);
     };
 
     // Helper: Calculate Haversine Distance in km
@@ -238,7 +238,7 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
                                     <label style={{ fontSize: '12px', color: '#4285F4', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                         <input
                                             type="checkbox"
-                                            checked={places.length > 0 && selectedPlaceIds.size === places.length}
+                                            checked={places.length > 0 && places.every(p => selectedPlacesMap.has(p.place_id))}
                                             onChange={handleSelectAll}
                                         />
                                         Select All
@@ -287,10 +287,11 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
                                 >
                                     <input
                                         type="checkbox"
-                                        checked={selectedPlaceIds.has(place.place_id)}
-                                        onChange={() => handleCheckboxChange(place.place_id)}
+                                        checked={selectedPlacesMap.has(place.place_id)}
+                                        onChange={() => handleCheckboxChange(place)}
                                         style={{ marginTop: '4px', cursor: 'pointer' }}
                                     />
+
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                                             <div style={{ fontWeight: '600', fontSize: '14px', color: '#333' }}>{place.name}</div>
