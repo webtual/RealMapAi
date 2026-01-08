@@ -86,6 +86,19 @@ const MapView = () => {
 
         const { Marker3DElement, Polyline3DElement } = maps3d;
 
+        // Helper: Calculate Distance
+        const calculateDistance = (lat1, lon1, lat2, lon2) => {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * (Math.PI / 180);
+            const dLon = (lon2 - lon1) * (Math.PI / 180);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return (R * c).toFixed(1);
+        };
+
         console.log(`📍 Rendering ${nearbyMarkers.length} nearby markers`);
 
         nearbyMarkers.forEach((place, index) => {
@@ -103,7 +116,10 @@ const MapView = () => {
                     ? place.geometry.location.lng()
                     : place.geometry.location.lng;
 
-                console.log(`adding marker for ${place.name} at ${lat}, ${lng}`);
+                // Calculate distance from map center
+                const distance = calculateDistance(mapInstance.center.lat, mapInstance.center.lng, lat, lng);
+
+                console.log(`adding marker for ${place.name} at ${lat}, ${lng} (${distance}km)`);
 
                 // 1. Create Marker
                 const marker = new Marker3DElement({
@@ -116,57 +132,57 @@ const MapView = () => {
                 const svgNs = "http://www.w3.org/2000/svg";
                 const svg = document.createElementNS(svgNs, "svg");
                 // Define a canvas large enough for label + pin
-                svg.setAttribute("width", "200");
-                svg.setAttribute("height", "50");
-                svg.setAttribute("viewBox", "0 0 200 80");
+                svg.setAttribute("width", "220");
+                svg.setAttribute("height", "80"); // Increased height
+                svg.setAttribute("viewBox", "0 0 220 80");
 
                 // 1. Text Label (ForeignObject)
                 const foreignObject = document.createElementNS(svgNs, "foreignObject");
                 foreignObject.setAttribute("x", "0");
                 foreignObject.setAttribute("y", "0");
-                foreignObject.setAttribute("width", "200");
-                foreignObject.setAttribute("height", "40"); // Top half for text
+                foreignObject.setAttribute("width", "220");
+                foreignObject.setAttribute("height", "50"); // Taller for 2 lines
 
                 const htmlContent = document.createElement("div");
                 htmlContent.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
                 htmlContent.style.cssText = `
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    width: 100%;
+                    display: flex; 
+                    justify-content: center; 
+                    align-items: center; 
+                    width: 100%; 
                     height: 100%;
                 `;
-                // Inner badge style
+                // Inner card style (Vertical Layout)
                 htmlContent.innerHTML = `
-                    <span style="
-                        background: white;
-                        padding: 4px 8px;
-                        border-radius: 12px;
-                        border: 1px solid #ccc;
-                        font-size: 15px;
-                        font-weight: 600;
-                        color: #333;
-                        white-space: nowrap;
-                        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-                        max-width: 190px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
+                    <div style="
+                        background: white; 
+                        padding: 6px 10px; 
+                        border-radius: 12px; 
+                        border: 1px solid #ccc; 
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 2px;
                         font-family: sans-serif;
+                        text-align: center;
+                        min-width: 80px;
                     ">
-                        ${place.name}
-                    </span>
+                        <span style="font-size: 13px; font-weight: 700; color: #222; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${place.name}
+                        </span>
+                        <span style="font-size: 11px; font-weight: 600; color: #1a73e8; background: #e8f0fe; padding: 2px 6px; border-radius: 10px;">
+                            ${distance} km
+                        </span>
+                    </div>
                 `;
                 foreignObject.appendChild(htmlContent);
                 svg.appendChild(foreignObject);
 
-                // 2. Pin Icon
-                // Centered at x=100. Pin tip at y=80?
-                // Let's position the standard pin group below the text
+                // 2. Pin Icon (Adjusted position based on new height)
                 const pinGroup = document.createElementNS(svgNs, "g");
-                // Translate x to center (100) - 12 (half pin width 24), y to 40 (text end)
-                pinGroup.setAttribute("transform", "translate(88, 40)");
+                pinGroup.setAttribute("transform", "translate(98, 50)"); // Center (220/2 = 110 - 12 = 98) 
 
-                // Standard Google Pin SVG path (scaled to 24px)
                 pinGroup.innerHTML = `
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="#EA4335" stroke="white" stroke-width="2">
                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>

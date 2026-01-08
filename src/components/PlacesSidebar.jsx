@@ -87,6 +87,23 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
         }
     };
 
+    // Helper: Calculate Haversine Distance in km
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+        const R = 6371; // Radius of the earth in km
+        const dLat = deg2rad(lat2 - lat1);
+        const dLon = deg2rad(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return (R * c).toFixed(1); // One decimal place
+    };
+
+    const deg2rad = (deg) => {
+        return deg * (Math.PI / 180);
+    };
+
     return (
         <>
             {/* Toggle Button (Visible when closed) */}
@@ -240,38 +257,68 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
                             </div>
                         )}
 
-                        {places.map(place => (
-                            <div
-                                key={place.place_id}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'flex-start',
-                                    gap: '10px',
-                                    padding: '10px',
-                                    background: 'white',
-                                    borderRadius: '8px',
-                                    border: '1px solid #eee',
-                                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                                }}
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={selectedPlaceIds.has(place.place_id)}
-                                    onChange={() => handleCheckboxChange(place.place_id)}
-                                    style={{ marginTop: '4px', cursor: 'pointer' }}
-                                />
-                                <div>
-                                    <div style={{ fontWeight: '600', fontSize: '14px', color: '#333' }}>{place.name}</div>
-                                    <div style={{ fontSize: '12px', color: '#777', marginTop: '2px' }}>
-                                        {place.vicinity || place.formatted_address}
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px', fontSize: '11px', color: '#555' }}>
-                                        {place.rating && <span>⭐ {place.rating}</span>}
-                                        {place.user_ratings_total && <span>({place.user_ratings_total})</span>}
+                        {places.map(place => {
+                            // Calculate Distance
+                            let distance = null;
+                            if (mapInstance && mapInstance.center && place.geometry && place.geometry.location) {
+                                const lat = typeof place.geometry.location.lat === 'function'
+                                    ? place.geometry.location.lat()
+                                    : place.geometry.location.lat;
+                                const lng = typeof place.geometry.location.lng === 'function'
+                                    ? place.geometry.location.lng()
+                                    : place.geometry.location.lng;
+
+                                distance = calculateDistance(mapInstance.center.lat, mapInstance.center.lng, lat, lng);
+                            }
+
+                            return (
+                                <div
+                                    key={place.place_id}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: '10px',
+                                        padding: '10px',
+                                        background: 'white',
+                                        borderRadius: '8px',
+                                        border: '1px solid #eee',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedPlaceIds.has(place.place_id)}
+                                        onChange={() => handleCheckboxChange(place.place_id)}
+                                        style={{ marginTop: '4px', cursor: 'pointer' }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                            <div style={{ fontWeight: '600', fontSize: '14px', color: '#333' }}>{place.name}</div>
+                                            {distance && (
+                                                <div style={{
+                                                    fontSize: '11px',
+                                                    color: '#4285F4',
+                                                    background: '#e8f0fe',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '10px',
+                                                    whiteSpace: 'nowrap',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    {distance} km
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div style={{ fontSize: '12px', color: '#777', marginTop: '2px' }}>
+                                            {place.vicinity || place.formatted_address}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px', fontSize: '11px', color: '#555' }}>
+                                            {place.rating && <span>⭐ {place.rating}</span>}
+                                            {place.user_ratings_total && <span>({place.user_ratings_total})</span>}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </div>
