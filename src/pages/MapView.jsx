@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import ChatSidebar from '../components/ChatSidebar';
+import PlacesSidebar from '../components/PlacesSidebar';
+
 
 const MapView = () => {
     const maps3d = useMapsLibrary('maps3d');
@@ -14,6 +16,10 @@ const MapView = () => {
     const [hideUI, setHideUI] = useState(false); // State to hide UI during capture
     const [showRoads, setShowRoads] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    // Nearby Places State
+    const [isPlacesSidebarOpen, setIsPlacesSidebarOpen] = useState(false);
+    const [nearbyMarkers, setNearbyMarkers] = useState([]);
+
     const [hasMounted, setHasMounted] = useState(false);
     useEffect(() => {
         if (!mapInstance || !maps3d) return;
@@ -67,6 +73,136 @@ const MapView = () => {
         setMapInstance(map);
 
     }, [maps3d]);
+
+    // Effect: Render Nearby Markers from Sidebar
+    useEffect(() => {
+        if (!mapInstance || !maps3d) return;
+
+        // Cleanup old nearby markers and lines
+        const oldMarkers = mapInstance.querySelectorAll('.nearby-place-marker');
+        oldMarkers.forEach(m => m.remove());
+        const oldLines = mapInstance.querySelectorAll('.nearby-place-line');
+        oldLines.forEach(l => l.remove());
+
+        const { Marker3DElement, Polyline3DElement } = maps3d;
+
+        console.log(`📍 Rendering ${nearbyMarkers.length} nearby markers`);
+
+        nearbyMarkers.forEach((place, index) => {
+            if (!place.geometry || !place.geometry.location) {
+                console.warn(`Skipping marker ${index}: No geometry`);
+                return;
+            }
+
+            try {
+                // Robust coordinate extraction
+                const lat = typeof place.geometry.location.lat === 'function'
+                    ? place.geometry.location.lat()
+                    : place.geometry.location.lat;
+                const lng = typeof place.geometry.location.lng === 'function'
+                    ? place.geometry.location.lng()
+                    : place.geometry.location.lng;
+
+                console.log(`adding marker for ${place.name} at ${lat}, ${lng}`);
+
+                // 1. Create Marker
+                const marker = new Marker3DElement({
+                    position: { lat, lng, altitude: 50 }, // Increased altitude
+                    altitudeMode: 'RELATIVE_TO_GROUND'
+                });
+                marker.classList.add('nearby-place-marker');
+
+                // Strict SVG creation to satisfy gmp-marker-3d requirement
+                const svgNs = "http://www.w3.org/2000/svg";
+                const svg = document.createElementNS(svgNs, "svg");
+                // Define a canvas large enough for label + pin
+                svg.setAttribute("width", "200");
+                svg.setAttribute("height", "50");
+                svg.setAttribute("viewBox", "0 0 200 80");
+
+                // 1. Text Label (ForeignObject)
+                const foreignObject = document.createElementNS(svgNs, "foreignObject");
+                foreignObject.setAttribute("x", "0");
+                foreignObject.setAttribute("y", "0");
+                foreignObject.setAttribute("width", "200");
+                foreignObject.setAttribute("height", "40"); // Top half for text
+
+                const htmlContent = document.createElement("div");
+                htmlContent.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+                htmlContent.style.cssText = `
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    width: 100%;
+                    height: 100%;
+                `;
+                // Inner badge style
+                htmlContent.innerHTML = `
+                    <span style="
+                        background: white;
+                        padding: 4px 8px;
+                        border-radius: 12px;
+                        border: 1px solid #ccc;
+                        font-size: 15px;
+                        font-weight: 600;
+                        color: #333;
+                        white-space: nowrap;
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                        max-width: 190px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        font-family: sans-serif;
+                    ">
+                        ${place.name}
+                    </span>
+                `;
+                foreignObject.appendChild(htmlContent);
+                svg.appendChild(foreignObject);
+
+                // 2. Pin Icon
+                // Centered at x=100. Pin tip at y=80?
+                // Let's position the standard pin group below the text
+                const pinGroup = document.createElementNS(svgNs, "g");
+                // Translate x to center (100) - 12 (half pin width 24), y to 40 (text end)
+                pinGroup.setAttribute("transform", "translate(88, 40)");
+
+                // Standard Google Pin SVG path (scaled to 24px)
+                pinGroup.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="#EA4335" stroke="white" stroke-width="2">
+                         <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                         <circle cx="12" cy="9" r="2.5" fill="white"/>
+                    </svg>
+                `;
+                svg.appendChild(pinGroup);
+
+                const template = document.createElement('template');
+                template.content.appendChild(svg);
+                marker.appendChild(template);
+
+                mapInstance.appendChild(marker);
+
+                // 2. Create Stem (Polyline)
+                if (Polyline3DElement) {
+                    const polyline = new Polyline3DElement({
+                        coordinates: [
+                            { lat, lng, altitude: 0 },
+                            { lat, lng, altitude: 50 }
+                        ],
+                        altitudeMode: 'RELATIVE_TO_GROUND',
+                        strokeColor: 'rgba(255, 255, 255, 1)', // Higher opacity
+                        strokeWidth: 1 // Thicker line
+                    });
+                    polyline.classList.add('nearby-place-line');
+                    mapInstance.appendChild(polyline);
+                }
+
+            } catch (err) {
+                console.error("Error creating marker:", err);
+            }
+        });
+
+    }, [nearbyMarkers, mapInstance, maps3d]);
+
 
     // Initialize Search & Logic
     useEffect(() => {
@@ -217,6 +353,7 @@ const MapView = () => {
     const handleCapture = async () => {
         try {
             setIsCapturing(true);
+            setIsPlacesSidebarOpen(false); // Close the drawer before capture
 
             // 1. Ask permission to capture screen
             // Prefer "current tab" if browser supports suggestion, but standard API doesn't force it.
@@ -237,6 +374,7 @@ const MapView = () => {
             style.innerHTML = `
                 .navbar { display: none !important; }
                 .chat-fab-button, .chat-sidebar-panel { display: none !important; }
+                .places-toggle-button { display: none !important; }
                 * { cursor: none !important; }
             `;
             document.head.appendChild(style);
@@ -293,7 +431,17 @@ const MapView = () => {
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100vh', background: '#000', overflow: 'hidden' }}>
+
+            <PlacesSidebar
+                isOpen={isPlacesSidebarOpen}
+                onToggle={() => setIsPlacesSidebarOpen(prev => !prev)}
+                placesLib={placesLib}
+                mapInstance={mapInstance}
+                onUpdateMarkers={setNearbyMarkers}
+            />
+
             {/* Control Panel */}
+
             {/* Control Panel */}
             <div style={{
                 position: 'absolute',
@@ -309,9 +457,11 @@ const MapView = () => {
                 {/* Note: Fragments or conditional rendering removed to keep component mounted */}
                 <div>
                     <div style={{
-                        position: 'absolute', top: 20, left: 20, zIndex: 100,
+                        position: 'absolute', top: 20, left: isPlacesSidebarOpen ? 340 : 20, zIndex: 100,
                         background: 'white', padding: '10px', borderRadius: '8px',
+                        transition: 'left 0.3s ease',
                         boxShadow: '0 4px 6px rgba(0,0,0,0.3)', display: 'flex', gap: '10px',
+
                         pointerEvents: 'auto'
                     }}>
                         <input
