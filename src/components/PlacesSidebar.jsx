@@ -11,13 +11,37 @@ const CATEGORIES = [
     { id: 'supermarket', label: 'Supermarkets', icon: '🛒' }
 ];
 
-const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarkers }) => {
+const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarkers, resetTrigger, placeToRemove, onPlaceRemovalHandled }) => {
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [places, setPlaces] = useState([]); // List of fetched places (current category)
     const [selectedPlacesMap, setSelectedPlacesMap] = useState(new Map()); // Persistent Map of selected places {id: place}
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    // Effect: Handle External Reset
+    useEffect(() => {
+        if (resetTrigger) {
+            setSelectedPlacesMap(new Map());
+            setPlaces([]);
+            setSelectedCategory(null);
+        }
+    }, [resetTrigger]);
+
+    // Effect: Handle Single Marker Removal from Map
+    useEffect(() => {
+        if (placeToRemove) {
+            setSelectedPlacesMap(currentMap => {
+                const newMap = new Map(currentMap);
+                if (newMap.has(placeToRemove)) {
+                    newMap.delete(placeToRemove);
+                }
+                return newMap;
+            });
+            onPlaceRemovalHandled();
+        }
+    }, [placeToRemove, onPlaceRemovalHandled]);
+
 
     // Effect: When category changes, fetch places
     useEffect(() => {

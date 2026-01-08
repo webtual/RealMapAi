@@ -19,6 +19,10 @@ const MapView = () => {
     // Nearby Places State
     const [isPlacesSidebarOpen, setIsPlacesSidebarOpen] = useState(false);
     const [nearbyMarkers, setNearbyMarkers] = useState([]);
+    const [resetPlacesTrigger, setResetPlacesTrigger] = useState(0);
+    const [placeToRemove, setPlaceToRemove] = useState(null); // ID of place to remove
+
+
 
     const [hasMounted, setHasMounted] = useState(false);
     useEffect(() => {
@@ -123,67 +127,121 @@ const MapView = () => {
 
                 // 1. Create Marker
                 const marker = new Marker3DElement({
-                    position: { lat, lng, altitude: 50 }, // Increased altitude
+                    position: { lat, lng, altitude: 50 },
                     altitudeMode: 'RELATIVE_TO_GROUND'
                 });
                 marker.classList.add('nearby-place-marker');
 
-                // Strict SVG creation to satisfy gmp-marker-3d requirement
+                // 2. Build Content (SVG -> ForeignObject -> HTML)
+                // This structure has proven compatible with gmp-marker-3d while effectively hosting HTML.
+
                 const svgNs = "http://www.w3.org/2000/svg";
                 const svg = document.createElementNS(svgNs, "svg");
-                // Define a canvas large enough for label + pin
-                svg.setAttribute("width", "220");
-                svg.setAttribute("height", "80"); // Increased height
-                svg.setAttribute("viewBox", "0 0 220 80");
+                svg.setAttribute("width", "300");
+                svg.setAttribute("height", "120"); // Ample height
+                svg.setAttribute("viewBox", "0 0 300 120");
+                // svg.style.pointerEvents = "none"; // Let clicks pass through empty areas
 
-                // 1. Text Label (ForeignObject)
+                // 2a. The HTML Card Container (ForeignObject)
                 const foreignObject = document.createElementNS(svgNs, "foreignObject");
                 foreignObject.setAttribute("x", "0");
                 foreignObject.setAttribute("y", "0");
-                foreignObject.setAttribute("width", "220");
-                foreignObject.setAttribute("height", "50"); // Taller for 2 lines
+                foreignObject.setAttribute("width", "300");
+                foreignObject.setAttribute("height", "120");
+                foreignObject.style.pointerEvents = "none"; // Critical: Pass events unless hit child
 
-                const htmlContent = document.createElement("div");
-                htmlContent.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-                htmlContent.style.cssText = `
-                    display: flex; 
-                    justify-content: center; 
-                    align-items: center; 
-                    width: 100%; 
+                const htmlContainer = document.createElement("div");
+                htmlContainer.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+                htmlContainer.style.cssText = `
+                    width: 100%;
                     height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: flex-start;
+                    padding-top: 10px;
                 `;
-                // Inner card style (Vertical Layout)
-                htmlContent.innerHTML = `
-                    <div style="
-                        background: white; 
-                        padding: 6px 10px; 
-                        border-radius: 12px; 
-                        border: 1px solid #ccc; 
-                        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        gap: 2px;
-                        font-family: sans-serif;
-                        text-align: center;
-                        min-width: 80px;
-                    ">
-                        <span style="font-size: 13px; font-weight: 700; color: #222; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+
+                // The Card Itself
+                const card = document.createElement("div");
+                card.style.cssText = `
+                    background: white; 
+                    padding: 8px 12px; 
+                    border-radius: 12px; 
+                    border: 1px solid #ccc; 
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 2px;
+                    font-family: sans-serif;
+                    text-align: center;
+                    min-width: 100px;
+                    position: relative;
+                    margin-bottom: 2px;
+                    pointer-events: auto; /* Re-enable clicks for the card */
+                    cursor: default;
+                `;
+
+                card.innerHTML = `
+                        <!-- Close Button -->
+                        <div class="close-btn" style="
+                            position: absolute;
+                            top: -10px;
+                            right: -10px;
+                            width: 26px;
+                            height: 26px;
+                            background: #ff5252;
+                            color: white;
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 16px;
+                            font-weight: bold;
+                            border: 2px solid white;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                            cursor: pointer;
+                            z-index: 1000;
+                            pointer-events: auto; /* Ensure button captures clicks */
+                        " title="Remove">×</div>
+
+                        <span style="font-size: 13px; font-weight: 700; color: #222; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
                             <span style="font-size: 16px;">${place.placeEmoji || '📍'}</span>
                             <span>${place.name}</span>
                         </span>
+
                         <span style="font-size: 11px; font-weight: 600; color: #1a73e8; background: #e8f0fe; padding: 2px 6px; border-radius: 10px;">
                             ${distance} km
                         </span>
-                    </div>
                 `;
-                foreignObject.appendChild(htmlContent);
+
+                // Attach Close Listener
+                const closeBtn = card.querySelector('.close-btn');
+                if (closeBtn) {
+                    const removeHandler = (e) => {
+                        console.log("Close Clicked:", place.name);
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setPlaceToRemove(place.place_id);
+                    };
+
+                    closeBtn.addEventListener('click', removeHandler);
+                    closeBtn.addEventListener('mousedown', (e) => e.stopPropagation()); // Stop Map drag
+                    closeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+                    closeBtn.addEventListener('touchstart', removeHandler, { passive: false });
+                }
+
+                htmlContainer.appendChild(card);
+                foreignObject.appendChild(htmlContainer);
                 svg.appendChild(foreignObject);
 
-                // 2. Pin Icon (Adjusted position based on new height)
+                // 2b. The Pin (SVG Group)
                 const pinGroup = document.createElementNS(svgNs, "g");
-                pinGroup.setAttribute("transform", "translate(98, 50)"); // Center (220/2 = 110 - 12 = 98) 
-
+                // Center the pin. Width 300, center 150. Pin height ~40 (24 + gap).
+                // Card is maybe 50-60px tall.
+                // We want pin below card.
+                pinGroup.setAttribute("transform", "translate(138, 70)");
                 pinGroup.innerHTML = `
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="#EA4335" stroke="white" stroke-width="2">
                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
@@ -192,9 +250,12 @@ const MapView = () => {
                 `;
                 svg.appendChild(pinGroup);
 
+                // 3. Wrap in Template (Required)
                 const template = document.createElement('template');
                 template.content.appendChild(svg);
-                marker.appendChild(template);
+
+                // Append using replaceChildren to be safe from ghost slots
+                marker.replaceChildren(template);
 
                 mapInstance.appendChild(marker);
 
@@ -245,9 +306,14 @@ const MapView = () => {
             mapInstance.range = 500;
             mapInstance.tilt = 45;
 
+            // Reset Nearby Places Sidebar
+            setResetPlacesTrigger(prev => prev + 1);
+            setNearbyMarkers([]); // Clear local marker state
+
             // 2. Draw Polygon
             if (place.geometry.viewport) {
                 const bounds = place.geometry.viewport;
+
                 const ne = bounds.getNorthEast();
                 const sw = bounds.getSouthWest();
 
@@ -268,6 +334,13 @@ const MapView = () => {
                 oldMarkers.forEach(m => m.remove());
                 const oldLines = mapInstance.querySelectorAll('gmp-polyline-3d');
                 oldLines.forEach(l => l.remove());
+
+                // Explicitly clear nearby class ones too just in case
+                const nearbyMarkers = mapInstance.querySelectorAll('.nearby-place-marker');
+                nearbyMarkers.forEach(m => m.remove());
+                const nearbyLines = mapInstance.querySelectorAll('.nearby-place-line');
+                nearbyLines.forEach(l => l.remove());
+
 
                 // Add Polygon
                 const polygon = new Polygon3DElement({
@@ -455,7 +528,11 @@ const MapView = () => {
                 placesLib={placesLib}
                 mapInstance={mapInstance}
                 onUpdateMarkers={setNearbyMarkers}
+                resetTrigger={resetPlacesTrigger}
+                placeToRemove={placeToRemove}
+                onPlaceRemovalHandled={() => setPlaceToRemove(null)}
             />
+
 
             {/* Control Panel */}
 
