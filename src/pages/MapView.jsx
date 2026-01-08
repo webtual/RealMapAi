@@ -168,8 +168,9 @@ const MapView = () => {
                         text-align: center;
                         min-width: 80px;
                     ">
-                        <span style="font-size: 13px; font-weight: 700; color: #222; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            ${place.name}
+                        <span style="font-size: 13px; font-weight: 700; color: #222; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+                            <span style="font-size: 16px;">${place.placeEmoji || '📍'}</span>
+                            <span>${place.name}</span>
                         </span>
                         <span style="font-size: 11px; font-weight: 600; color: #1a73e8; background: #e8f0fe; padding: 2px 6px; border-radius: 10px;">
                             ${distance} km

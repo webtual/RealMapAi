@@ -40,7 +40,15 @@ const PlacesSidebar = ({ isOpen, onToggle, placesLib, mapInstance, onUpdateMarke
             service.nearbySearch(request, (results, status) => {
                 setIsLoading(false);
                 if (status === placesLib.PlacesServiceStatus.OK) {
-                    setPlaces(results);
+                    // Inject the category icon (emoji) into the place object
+                    const categoryData = CATEGORIES.find(c => c.id === selectedCategory);
+                    const icon = categoryData ? categoryData.icon : '📍';
+
+                    const placesWithIcons = results.map(p => ({
+                        ...p,
+                        placeEmoji: icon
+                    }));
+                    setPlaces(placesWithIcons);
                 } else {
                     setError('No places found or API error.');
                 }
